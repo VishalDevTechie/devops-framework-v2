@@ -1,35 +1,3 @@
-# framework:
-#   name: "Self-Service DevOps Framework"
-#   version: "2.0.0"
-  
-# docker:
-#   registry: "docker.io"
-#   organization: "vishal10101"
-#   default_port: 8080
-  
-# kubernetes:
-#   default_namespace: "default"
-#   cluster_name: "production-aks"
-  
-# monitoring:
-#   enabled: true
-#   prometheus_enabled: true
-#   grafana_enabled: true
-  
-# security:
-#   image_scanning: true
-#   vulnerability_threshold: "high"
-  
-# scaling:
-#   hpa_enabled: true
-#   default_min_replicas: 1
-#   default_max_replicas: 5
-#   default_cpu_threshold: 70
-  
-# build:
-#   default_node_version: "18"
-#   cache_enabled: true
-#   parallel_builds: true
 framework:
   name: "Self-Service DevOps Framework"
   version: "2.0.0"
