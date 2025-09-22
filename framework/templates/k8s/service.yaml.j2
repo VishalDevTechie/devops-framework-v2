@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ app.name }}-service
+  namespace: {{ deployment.namespace | default('default') }}
+  labels:
+    app: {{ app.name }}
+    framework: {{ app.framework }}
+    environment: {{ deployment.environment | default('production') }}
+    managed-by: devops-framework-v2
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+spec:
+  type: {{ deployment.service.type | default('LoadBalancer') }}
+  sessionAffinity: None
+  ports:
+  - name: http
+    port: {{ deployment.service.port | default(80) }}
+    targetPort: {{ deployment.service.target_port | default(docker.port | default(8080)) }}
+    protocol: TCP
+  selector:
+    app: {{ app.name }}
+  {% if deployment.service.type == 'LoadBalancer' %}
+  # Azure LoadBalancer specific configurations
+  loadBalancerSourceRanges: []
+  {% endif %}
