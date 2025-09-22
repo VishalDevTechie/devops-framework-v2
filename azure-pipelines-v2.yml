@@ -22,7 +22,7 @@ resources:
       endpoint: GitHub connection
 
 pool:
-  name: vishal_agent
+  name: Default
 
 parameters:
   - name: deploymentMode
