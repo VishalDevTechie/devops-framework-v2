@@ -50,11 +50,9 @@ stages:
         steps:
           - checkout: devops-framework
             displayName: 'Checkout DevOps Framework V2'
-            path: 'framework-v2'
           
           - checkout: angular-app
             displayName: 'Checkout Angular Application'
-            path: 'angular-app'
           
           - task: UsePythonVersion@0
             displayName: 'Setup Python'
