@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ app.name }}
+  namespace: {{ deployment.namespace | default('default') }}
+  labels:
+    app: {{ app.name }}
+    framework: {{ app.framework }}
+    environment: {{ deployment.environment | default('production') }}
+    version: {{ docker.tag | default('latest') }}
+spec:
+  replicas: {{ deployment.replicas | default(1) }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: {{ app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ app.name }}
+        framework: {{ app.framework }}
+        environment: {{ deployment.environment | default('production') }}
+        version: {{ docker.tag | default('latest') }}
+    spec:
+      containers:
+      - name: {{ app.name }}
+        image: {{ docker.full_image }}
+        ports:
+        - containerPort: {{ docker.port | default(8080) }}
+          name: http
+        env:
+        - name: ENVIRONMENT
+          value: "{{ deployment.environment | default('production') }}"
+        - name: APP_NAME
+          value: "{{ app.name }}"
+        - name: NODE_ENV
+          value: "production"
+        {% if deployment.health_checks %}
+        readinessProbe:
+          httpGet:
+            path: {{ deployment.health_checks.readiness.path | default('/') }}
+            port: {{ deployment.health_checks.readiness.port | default(docker.port | default(8080)) }}
+          initialDelaySeconds: {{ deployment.health_checks.readiness.initial_delay | default(10) }}
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: {{ deployment.health_checks.liveness.path | default('/') }}
+            port: {{ deployment.health_checks.liveness.port | default(docker.port | default(8080)) }}
+          initialDelaySeconds: {{ deployment.health_checks.liveness.initial_delay | default(30) }}
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        {% endif %}
+        {% if deployment.resources %}
+        resources:
+          {% if deployment.resources.requests %}
+          requests:
+            memory: "{{ deployment.resources.requests.memory | default('128Mi') }}"
+            cpu: "{{ deployment.resources.requests.cpu | default('100m') }}"
+          {% endif %}
+          {% if deployment.resources.limits %}
+          limits:
+            memory: "{{ deployment.resources.limits.memory | default('512Mi') }}"
+            cpu: "{{ deployment.resources.limits.cpu | default('500m') }}"
+          {% endif %}
+        {% endif %}
+        {% if app.framework == 'angular' %}
+        # Angular-specific volume mounts for nginx config
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+          readOnly: true
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: {{ app.name }}-nginx-config
+        {% endif %}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ app.name }}-service
+  namespace: {{ deployment.namespace | default('default') }}
+  labels:
+    app: {{ app.name }}
+    framework: {{ app.framework }}
+    environment: {{ deployment.environment | default('production') }}
+spec:
+  type: {{ deployment.service.type | default('LoadBalancer') }}
+  ports:
+  - port: {{ deployment.service.port | default(80) }}
+    targetPort: {{ deployment.service.target_port | default(docker.port | default(8080)) }}
+    protocol: TCP
+    name: http
+  selector:
+    app: {{ app.name }}
+{% if app.framework == 'angular' %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ app.name }}-nginx-config
+  namespace: {{ deployment.namespace | default('default') }}
+  labels:
+    app: {{ app.name }}
+    framework: {{ app.framework }}
+data:
+  default.conf: |
+    server {
+        listen {{ docker.port | default(8080) }};
+        server_name localhost;
+        
+        # Root directory
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        
+        # Handle Angular routing
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+        
+        # Enable gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1000;
+        gzip_proxied any;
+        gzip_types
+            text/plain
+            text/css
+            text/js
+            text/xml
+            text/javascript
+            application/javascript
+            application/xml+rss
+            application/json;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+        
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+    }
+{% endif %}
