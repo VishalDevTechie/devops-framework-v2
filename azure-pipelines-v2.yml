@@ -1,252 +1,3 @@
-# trigger:
-#   branches:
-#     include: ['main', 'develop', 'release/*']
-#   paths:
-#     exclude: ['README.md', 'docs/*']
-
-# pr:
-#   branches:
-#     include: ['main', 'develop']
-
-# resources:
-#   repositories:
-#     - repository: angular-app
-#       type: github
-#       name: VishalDevTechie/dsa-visualizer
-#       endpoint: GitHub connection
-
-# pool:
-#   name: Default
-
-# parameters:
-#   - name: deploymentMode
-#     displayName: "Deployment Mode"
-#     type: string
-#     default: smart-auto
-#     values:
-#       - smart-auto        # Full auto-detection and deployment
-#       - analysis-only     # Analysis and config generation only
-#       - build-only       # Build and containerize only
-#       - full-pipeline    # Complete pipeline with deployment
-
-# variables:
-#   DOCKER_SERVICE_CONNECTION: 'DockerHubConnection'
-#   AKS_SERVICE_CONNECTION: 'AKSConnection'
-#   DOCKER_REPOSITORY: 'vishal10101'
-#   DEPLOYMENT_MODE: ${{ parameters.deploymentMode }}
-
-# stages:
-#   - stage: SmartAnalysis
-#     displayName: 'Smart Framework Analysis'
-#     jobs:
-#       - job: AnalyzeApplication
-#         displayName: 'Analyze Angular Application'
-#         steps:
-#           - checkout: self
-#             displayName: 'Checkout Framework V2'
-          
-#           - checkout: angular-app
-#             displayName: 'Checkout Angular Application'
-#             path: 'angular-app'
-          
-#           - task: UsePythonVersion@0
-#             displayName: 'Setup Python'
-#             inputs:
-#               versionSpec: '3.9'
-#               addToPath: true
-          
-#           - script: |
-#               python -m pip install --upgrade pip
-#               pip install -r requirements.txt
-#             displayName: 'Install Framework Dependencies'
-          
-#           - task: PythonScript@0
-#             displayName: 'Run Smart Analysis'
-#             inputs:
-#               scriptSource: 'inline'
-#               script: |
-#                 import sys
-#                 sys.path.append('scripts')
-                
-#                 from smart_orchestrator import SmartOrchestrator
-#                 import json
-                
-#                 # Initialize orchestrator
-#                 orchestrator = SmartOrchestrator()
-                
-#                 # Analyze the Angular application
-#                 repo_path = 'angular-app'
-                
-#                 # Run analysis
-#                 result = orchestrator.process_repository(repo_path)
-                
-#                 # Save results
-#                 with open('analysis-results.json', 'w') as f:
-#                     json.dump(result, f, indent=2, default=str)
-                
-#                 if result['success']:
-#                     print(" Smart analysis completed successfully")
-#                     config = result['config']
-#                     print(f"Framework: {config['app']['framework']}")
-#                     print(f"Confidence: {config['detection']['confidence']:.1%}")
-#                     print(f"Build Command: {config['build_strategy']['command']}")
-#                     print(f"Docker Image: {config['docker']['full_image']}")
-#                 else:
-#                     print(f" Analysis failed: {result.get('error')}")
-#                     sys.exit(1)
-          
-#           - task: PublishPipelineArtifact@1
-#             displayName: 'Publish Analysis Results'
-#             inputs:
-#               targetPath: 'analysis-results.json'
-#               artifact: 'analysis-results'
-
-#   - stage: SmartBuild
-#     displayName: 'Smart Build & Containerize'
-#     dependsOn: SmartAnalysis
-#     condition: and(succeeded(), in(variables.DEPLOYMENT_MODE, 'smart-auto', 'build-only', 'full-pipeline'))
-#     jobs:
-#       - job: BuildApplication
-#         displayName: 'Build Angular Application'
-#         steps:
-#           - checkout: self
-#           - checkout: angular-app
-#             path: 'angular-app'
-          
-#           - task: DownloadPipelineArtifact@2
-#             inputs:
-#               artifact: 'analysis-results'
-#               path: $(Pipeline.Workspace)
-          
-#           - task: UsePythonVersion@0
-#             inputs:
-#               versionSpec: '3.9'
-          
-#           - script: pip install -r requirements.txt
-#             displayName: 'Install Dependencies'
-          
-#           - task: Docker@2
-#             displayName: 'Docker Login'
-#             inputs:
-#               command: 'login'
-#               containerRegistry: $(DOCKER_SERVICE_CONNECTION)
-          
-#           - task: PythonScript@0
-#             displayName: 'Execute Smart Build Pipeline'
-#             inputs:
-#               scriptSource: 'inline'
-#               script: |
-#                 import sys
-#                 import json
-#                 sys.path.append('scripts')
-                
-#                 from smart_orchestrator import SmartOrchestrator
-                
-#                 # Load analysis results
-#                 with open('$(Pipeline.Workspace)/analysis-results.json') as f:
-#                     analysis_result = json.load(f)
-                
-#                 if not analysis_result['success']:
-#                     print(" Cannot proceed - analysis failed")
-#                     sys.exit(1)
-                
-#                 # Initialize orchestrator
-#                 orchestrator = SmartOrchestrator()
-                
-#                 # Execute build and docker stages
-#                 config = analysis_result['config']
-#                 result = orchestrator.process_repository('angular-app', config)
-                
-#                 if result['success']:
-#                     print(" Build and containerization completed")
-#                 else:
-#                     print(f" Build failed: {result.get('error')}")
-#                     sys.exit(1)
-          
-#           - task: Docker@2
-#             displayName: 'Docker Logout'
-#             inputs:
-#               command: 'logout'
-#               containerRegistry: $(DOCKER_SERVICE_CONNECTION)
-#             condition: always()
-
-#   - stage: SmartDeploy
-#     displayName: 'Smart Deployment'
-#     dependsOn: SmartBuild
-#     condition: and(succeeded(), in(variables.DEPLOYMENT_MODE, 'smart-auto', 'full-pipeline'))
-#     jobs:
-#       - deployment: DeployToAKS
-#         displayName: 'Deploy to AKS'
-#         environment: 'production'
-#         strategy:
-#           runOnce:
-#             deploy:
-#               steps:
-#                 - checkout: self
-                
-#                 - task: DownloadPipelineArtifact@2
-#                   inputs:
-#                     artifact: 'analysis-results'
-#                     path: $(Pipeline.Workspace)
-                
-#                 - task: UsePythonVersion@0
-#                   inputs:
-#                     versionSpec: '3.9'
-                
-#                 - script: pip install -r requirements.txt
-#                   displayName: 'Install Dependencies'
-                
-#                 - task: PythonScript@0
-#                   displayName: 'Generate Deployment Manifests'
-#                   inputs:
-#                     scriptSource: 'inline'
-#                     script: |
-#                       import sys
-#                       import json
-#                       sys.path.append('scripts')
-                      
-#                       from smart_deploy import run as deploy_run
-                      
-#                       # Load configuration
-#                       with open('$(Pipeline.Workspace)/analysis-results.json') as f:
-#                           analysis_result = json.load(f)
-                      
-#                       config = analysis_result['config']
-                      
-#                       # Generate manifests
-#                       deploy_result = deploy_run(config)
-                      
-#                       if deploy_result['success']:
-#                           print(" Deployment manifests generated")
-#                       else:
-#                           print(f" Manifest generation failed: {deploy_result.get('error')}")
-#                           sys.exit(1)
-                
-#                 - task: Kubernetes@1
-#                   displayName: 'Deploy to AKS'
-#                   inputs:
-#                     connectionType: 'Kubernetes Service Connection'
-#                     kubernetesServiceEndpoint: $(AKS_SERVICE_CONNECTION)
-#                     command: 'apply'
-#                     useConfigurationFile: true
-#                     configurationType: 'filePath'
-#                     configuration: 'generated-k8s-manifest.yaml'
-                
-#                 - task: Kubernetes@1
-#                   displayName: 'Wait for Deployment'
-#                   inputs:
-#                     connectionType: 'Kubernetes Service Connection'
-#                     kubernetesServiceEndpoint: $(AKS_SERVICE_CONNECTION)
-#                     command: 'rollout'
-#                     arguments: 'status deployment/dsa-visualizer --timeout=300s'
-                
-#                 - task: Kubernetes@1
-#                   displayName: 'Get Deployment Status'
-#                   inputs:
-#                     connectionType: 'Kubernetes Service Connection'
-#                     kubernetesServiceEndpoint: $(AKS_SERVICE_CONNECTION)
-#                     command: 'get'
-#                     arguments: 'pods,services -l app=dsa-visualizer'
 trigger:
   branches:
     include: ['main', 'develop', 'release/*']
@@ -321,33 +72,49 @@ stages:
                 Write-Host "Available directories:"
                 Get-ChildItem -Directory | Format-Table Name
                 
-                # Change to framework directory
-                if (Test-Path "framework-v2") {
-                    Write-Host " Framework-v2 directory found"
-                    Set-Location "framework-v2"
+                # Try multiple possible framework directory names
+                $possibleDirs = @("framework-v2", "devops-framework-v2", ".")
+                $frameworkDir = $null
+                
+                foreach ($dir in $possibleDirs) {
+                    if (Test-Path $dir) {
+                        $requirementsPath = Join-Path $dir "requirements.txt"
+                        if (Test-Path $requirementsPath) {
+                            Write-Host " Found framework directory: $dir"
+                            $frameworkDir = $dir
+                            break
+                        }
+                    }
+                }
+                
+                if ($frameworkDir) {
+                    Write-Host " Using framework directory: $frameworkDir"
+                    Set-Location $frameworkDir
                     
                     if (Test-Path "requirements.txt") {
-                        Write-Host " requirements.txt found, installing dependencies..."
+                        Write-Host " Installing dependencies..."
                         python -m pip install --upgrade pip
                         pip install -r requirements.txt
                         
                         if ($LASTEXITCODE -eq 0) {
                             Write-Host " Dependencies installed successfully"
                         } else {
-                            Write-Host "Failed to install dependencies"
+                            Write-Host " Failed to install dependencies"
                             exit 1
                         }
                     } else {
-                        Write-Host " requirements.txt not found"
-                        Write-Host "Available files:"
-                        Get-ChildItem | Format-Table Name
+                        Write-Host " requirements.txt not found in $frameworkDir"
                         exit 1
                     }
                 } else {
-                    Write-Host " framework-v2 directory not found"
+                    Write-Host " No framework directory with requirements.txt found"
+                    Write-Host "Searched in: $($possibleDirs -join ', ')"
+                    
+                    # Additional debugging
+                    Write-Host "`nDetailed directory structure:"
+                    Get-ChildItem -Recurse -Name "requirements.txt" -ErrorAction SilentlyContinue
                     exit 1
-                }
-          
+                }         
           - task: PythonScript@0
             displayName: 'Run Smart Analysis'
             inputs:
