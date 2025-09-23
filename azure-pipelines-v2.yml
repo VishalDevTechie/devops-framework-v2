@@ -10,12 +10,12 @@ pr:
 
 resources:
   repositories:
-    - repository: devops-framework
+    - repository: framework
       type: github
-      name: VishalDevTechie/devops-framework-v2  # Replace with your actual GitHub repo
+      name: VishalDevTechie/devops-framework-v2
       ref: development
       endpoint: GitHub connection
-    - repository: angular-app
+    - repository: service
       type: github
       name: VishalDevTechie/dsa-visualizer
       ref: development
@@ -48,11 +48,13 @@ stages:
       - job: AnalyzeApplication
         displayName: 'Analyze Angular Application'
         steps:
-          - checkout: devops-framework
-            displayName: 'Checkout DevOps Framework V2'
+          - checkout: framework
+            displayName: 'Checkout DevOps Framework'
+            path: framework
           
-          - checkout: angular-app
-            displayName: 'Checkout Angular Application'
+          - checkout: service
+            displayName: 'Checkout Service Application'
+            path: service
           
           - task: UsePythonVersion@0
             displayName: 'Setup Python'
@@ -66,75 +68,61 @@ stages:
               targetType: 'inline'
               script: |
                 Write-Host "=== Installing Framework Dependencies ==="
-                Write-Host "Current directory: $(Get-Location)"
-                Write-Host "Available directories:"
-                Get-ChildItem -Directory | Format-Table Name
+                Write-Host "Agent working directory: $(Agent.BuildDirectory)"
+                Write-Host "Build source directory: $(Build.SourcesDirectory)"
                 
-                # Try multiple possible framework directory names
-                $possibleDirs = @("framework-v2", "devops-framework-v2", ".")
-                $frameworkDir = $null
+                # Navigate to framework directory
+                $frameworkPath = "$(Agent.BuildDirectory)/s/framework"
+                Write-Host "Framework path: $frameworkPath"
                 
-                foreach ($dir in $possibleDirs) {
-                    if (Test-Path $dir) {
-                        $requirementsPath = Join-Path $dir "requirements.txt"
-                        if (Test-Path $requirementsPath) {
-                            Write-Host " Found framework directory: $dir"
-                            $frameworkDir = $dir
-                            break
-                        }
-                    }
-                }
-                
-                if ($frameworkDir) {
-                    Write-Host " Using framework directory: $frameworkDir"
-                    Set-Location $frameworkDir
+                if (Test-Path $frameworkPath) {
+                    Set-Location $frameworkPath
+                    Write-Host "Changed to framework directory"
+                    Write-Host "Current directory: $(Get-Location)"
                     
                     if (Test-Path "requirements.txt") {
-                        Write-Host " Installing dependencies..."
+                        Write-Host "Installing Python dependencies..."
                         python -m pip install --upgrade pip
                         pip install -r requirements.txt
                         
                         if ($LASTEXITCODE -eq 0) {
-                            Write-Host " Dependencies installed successfully"
+                            Write-Host "Dependencies installed successfully"
                         } else {
-                            Write-Host " Failed to install dependencies"
+                            Write-Host "Failed to install dependencies"
                             exit 1
                         }
                     } else {
-                        Write-Host " requirements.txt not found in $frameworkDir"
+                        Write-Host "requirements.txt not found"
                         exit 1
                     }
                 } else {
-                    Write-Host " No framework directory with requirements.txt found"
-                    Write-Host "Searched in: $($possibleDirs -join ', ')"
-                    
-                    # Additional debugging
-                    Write-Host "`nDetailed directory structure:"
-                    Get-ChildItem -Recurse -Name "requirements.txt" -ErrorAction SilentlyContinue
+                    Write-Host "Framework directory not found at: $frameworkPath"
+                    Write-Host "Available directories:"
+                    Get-ChildItem "$(Agent.BuildDirectory)/s" | Format-Table Name
                     exit 1
-                }         
+                }
+          
           - task: PythonScript@0
             displayName: 'Run Smart Analysis'
             inputs:
               scriptSource: 'inline'
-              workingDirectory: framework-v2
+              workingDirectory: '$(Agent.BuildDirectory)/s/framework'
               script: |
                 import sys
                 import os
                 import json
                 
                 print(f"Python working directory: {os.getcwd()}")
-                print(f"Available files and directories:")
-                for item in os.listdir('.'):
-                    print(f"  {item}")
+                print(f"Python path: {sys.path}")
                 
                 # Add scripts directory to Python path
                 scripts_path = os.path.join(os.getcwd(), 'scripts')
                 if os.path.exists(scripts_path):
                     sys.path.insert(0, scripts_path)
-                    print(f" Added scripts directory to path: {scripts_path}")
+                    print(f"Added scripts directory to path: {scripts_path}")
                 else:
-                    print(f" Scripts directory not found: {scripts_path}")
+                    print(f"Scripts directory not found: {scripts_path}")
+                    print(f"Available directories: {os.listdir('.')}")
                     sys.exit(1)
                 
                 try:
@@ -143,20 +131,28 @@ stages:
                     # Initialize orchestrator
                     orchestrator = SmartOrchestrator()
                     
-                    # Analyze the Angular application (relative path from framework directory)
-                    repo_path = '../angular-app'
-                    print(f"Target repository path: {repo_path}")
-                    print(f"Repository exists: {os.path.exists(repo_path)}")
+                    # Service repository path (relative to agent build directory)
+                    service_path = os.path.join('$(Agent.BuildDirectory)', 's', 'service')
+                    print(f"Service repository path: {service_path}")
+                    print(f"Service repository exists: {os.path.exists(service_path)}")
                     
-                    # Run analysis only (no build/deploy stages)
-                    result = orchestrator.analyze_only(repo_path)
+                    if not os.path.exists(service_path):
+                        print("Service repository not found. Available directories:")
+                        base_path = os.path.join('$(Agent.BuildDirectory)', 's')
+                        if os.path.exists(base_path):
+                            for item in os.listdir(base_path):
+                                print(f"  {item}")
+                        sys.exit(1)
+                    
+                    # Run analysis only
+                    result = orchestrator.analyze_only(service_path)
                     
                     # Save results
                     with open('analysis-results.json', 'w') as f:
                         json.dump(result, f, indent=2, default=str)
                     
                     if result['success']:
-                        print(" Smart analysis completed successfully")
+                        print("Smart analysis completed successfully")
                         config = result['config']
                         print(f"Framework: {config.get('app', {}).get('framework', 'unknown')}")
                         detection = config.get('detection', {})
@@ -166,18 +162,18 @@ stages:
                         docker = config.get('docker', {})
                         print(f"Docker Image: {docker.get('full_image', 'unknown')}")
                     else:
-                        print(f" Analysis failed: {result.get('error')}")
+                        print(f"Analysis failed: {result.get('error')}")
                         sys.exit(1)
                         
                 except ImportError as e:
-                    print(f" Import error: {e}")
-                    print("Available files in scripts directory:")
+                    print(f"Import error: {e}")
                     if os.path.exists(scripts_path):
+                        print("Available files in scripts directory:")
                         for file in os.listdir(scripts_path):
                             print(f"  {file}")
                     sys.exit(1)
                 except Exception as e:
-                    print(f" Unexpected error: {e}")
+                    print(f"Unexpected error: {e}")
                     import traceback
                     traceback.print_exc()
                     sys.exit(1)
@@ -185,7 +181,7 @@ stages:
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Analysis Results'
             inputs:
-              targetPath: 'framework-v2/analysis-results.json'
+              targetPath: '$(Agent.BuildDirectory)/s/framework/analysis-results.json'
               artifact: 'analysis-results'
 
   - stage: SmartBuild
@@ -196,13 +192,13 @@ stages:
       - job: BuildApplication
         displayName: 'Build Angular Application'
         steps:
-          - checkout: devops-framework
-            displayName: 'Checkout DevOps Framework V2'
-            path: 'framework-v2'
+          - checkout: framework
+            displayName: 'Checkout DevOps Framework'
+            path: framework
           
-          - checkout: angular-app
-            displayName: 'Checkout Angular Application'
-            path: 'angular-app'
+          - checkout: service
+            displayName: 'Checkout Service Application'
+            path: service
           
           - task: DownloadPipelineArtifact@2
             inputs:
@@ -218,7 +214,8 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Set-Location "framework-v2"
+                $frameworkPath = "$(Agent.BuildDirectory)/s/framework"
+                Set-Location $frameworkPath
                 pip install -r requirements.txt
           
           - task: Docker@2
@@ -231,7 +228,7 @@ stages:
             displayName: 'Execute Smart Build Pipeline'
             inputs:
               scriptSource: 'inline'
-              workingDirectory: framework-v2
+              workingDirectory: '$(Agent.BuildDirectory)/s/framework'
               script: |
                 import sys
                 import json
@@ -245,34 +242,36 @@ stages:
                     from smart_orchestrator import SmartOrchestrator
                     
                     # Load analysis results
-                    with open('$(Pipeline.Workspace)/analysis-results.json') as f:
+                    analysis_file = os.path.join('$(Pipeline.Workspace)', 'analysis-results.json')
+                    with open(analysis_file) as f:
                         analysis_result = json.load(f)
                     
                     if not analysis_result['success']:
-                        print(" Cannot proceed - analysis failed")
+                        print("Cannot proceed - analysis failed")
                         sys.exit(1)
                     
                     # Initialize orchestrator
                     orchestrator = SmartOrchestrator()
                     
-                    # Execute build and docker stages
-                    config = analysis_result['config']
-                    repo_path = '../angular-app'
+                    # Service repository path
+                    service_path = os.path.join('$(Agent.BuildDirectory)', 's', 'service')
                     
                     print(f"Framework working directory: {os.getcwd()}")
-                    print(f"Target repository path: {repo_path}")
-                    print(f"Repository exists: {os.path.exists(repo_path)}")
+                    print(f"Service repository path: {service_path}")
+                    print(f"Service repository exists: {os.path.exists(service_path)}")
                     
-                    result = orchestrator.process_repository(repo_path, config)
+                    # Execute build and docker stages
+                    config = analysis_result['config']
+                    result = orchestrator.process_repository(service_path, config)
                     
                     if result['success']:
-                        print(" Build and containerization completed")
+                        print("Build and containerization completed")
                     else:
-                        print(f" Build failed: {result.get('error')}")
+                        print(f"Build failed: {result.get('error')}")
                         sys.exit(1)
                         
                 except Exception as e:
-                    print(f" Build pipeline error: {e}")
+                    print(f"Build pipeline error: {e}")
                     import traceback
                     traceback.print_exc()
                     sys.exit(1)
@@ -296,9 +295,9 @@ stages:
           runOnce:
             deploy:
               steps:
-                - checkout: devops-framework
-                  displayName: 'Checkout DevOps Framework V2'
-                  path: 'framework-v2'
+                - checkout: framework
+                  displayName: 'Checkout DevOps Framework'
+                  path: framework
                 
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download Analysis Results'
@@ -316,15 +315,16 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      Set-Location "framework-v2"
+                      $frameworkPath = "$(Agent.BuildDirectory)/s/framework"
+                      Set-Location $frameworkPath
                       pip install -r requirements.txt
-                      Write-Host " Framework dependencies installed"
+                      Write-Host "Framework dependencies installed"
                 
                 - task: PythonScript@0
                   displayName: 'Generate Kubernetes Manifests'
                   inputs:
                     scriptSource: 'inline'
-                    workingDirectory: framework-v2
+                    workingDirectory: '$(Agent.BuildDirectory)/s/framework'
                     script: |
                       import sys
                       import json
@@ -338,11 +338,12 @@ stages:
                           from smart_deploy import run as deploy_run
                           
                           # Load configuration
-                          with open('$(Pipeline.Workspace)/analysis-results.json') as f:
+                          analysis_file = os.path.join('$(Pipeline.Workspace)', 'analysis-results.json')
+                          with open(analysis_file) as f:
                               analysis_result = json.load(f)
                           
                           if not analysis_result['success']:
-                              print(" Cannot deploy - analysis failed")
+                              print("Cannot deploy - analysis failed")
                               sys.exit(1)
                           
                           config = analysis_result['config']
@@ -355,29 +356,29 @@ stages:
                                   'replicas': 1
                               }
                           
-                          print(f" Generating manifests for: {config['app']['name']}")
-                          print(f" Docker Image: {config['docker']['full_image']}")
+                          print(f"Generating manifests for: {config['app']['name']}")
+                          print(f"Docker Image: {config['docker']['full_image']}")
                           
                           # Generate manifests
                           deploy_result = deploy_run(config)
                           
                           if deploy_result['success']:
-                              print(" Kubernetes manifests generated successfully")
-                              print(f" Manifest file: {deploy_result['manifest_path']}")
+                              print("Kubernetes manifests generated successfully")
+                              print(f"Manifest file: {deploy_result['manifest_path']}")
                               
                               # Display manifest preview
                               with open(deploy_result['manifest_path'], 'r') as f:
                                   manifest_content = f.read()
-                                  print("\n Generated Manifest Preview:")
+                                  print("\nGenerated Manifest Preview:")
                                   print("-" * 50)
                                   print(manifest_content[:1000] + "..." if len(manifest_content) > 1000 else manifest_content)
                                   print("-" * 50)
                           else:
-                              print(f" Manifest generation failed: {deploy_result.get('error')}")
+                              print(f"Manifest generation failed: {deploy_result.get('error')}")
                               sys.exit(1)
                               
                       except Exception as e:
-                          print(f" Deploy script error: {e}")
+                          print(f"Deploy script error: {e}")
                           import traceback
                           traceback.print_exc()
                           sys.exit(1)
@@ -407,7 +408,7 @@ stages:
                     command: 'apply'
                     useConfigurationFile: true
                     configurationType: 'filePath'
-                    configuration: 'framework-v2/generated-k8s-manifest.yaml'
+                    configuration: '$(Agent.BuildDirectory)/s/framework/generated-k8s-manifest.yaml'
                     outputFormat: 'yaml'
                 
                 - task: Kubernetes@1
@@ -440,14 +441,14 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      Write-Host " Deployment completed!" -ForegroundColor Green
-                      Write-Host " Deployment Summary:" -ForegroundColor Cyan
+                      Write-Host "Deployment completed!" -ForegroundColor Green
+                      Write-Host "Deployment Summary:" -ForegroundColor Cyan
                       Write-Host "  Application: $(Build.Repository.Name)" -ForegroundColor White
                       Write-Host "  Namespace: default" -ForegroundColor White
                       Write-Host "  Environment: production" -ForegroundColor White
                       Write-Host "  Build: $(Build.BuildNumber)" -ForegroundColor White
                       Write-Host ""
-                      Write-Host " Next Steps:" -ForegroundColor Yellow
+                      Write-Host "Next Steps:" -ForegroundColor Yellow
                       Write-Host "  1. Check the External IP from the service output above"
                       Write-Host "  2. Access your application at http://<EXTERNAL-IP>"
                       Write-Host "  3. Monitor deployment: kubectl get pods --namespace=default"
