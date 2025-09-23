@@ -50,9 +50,11 @@ stages:
         steps:
           - checkout: framework
             displayName: 'Checkout DevOps Framework'
+            path: framework
           
           - checkout: service
             displayName: 'Checkout Service Application'
+            path: service
           
           - task: UsePythonVersion@0
             displayName: 'Setup Python'
@@ -65,38 +67,46 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "=== Installing Framework Dependencies ==="
+                Write-Host "Installing Framework Dependencies" -ForegroundColor Green
                 Write-Host "Agent working directory: $(Agent.BuildDirectory)"
                 Write-Host "Build source directory: $(Build.SourcesDirectory)"
                 
-                # Navigate to framework directory
-                $frameworkPath = "$(Agent.BuildDirectory)/s/framework"
+                # Navigate to framework directory using the correct path
+                $frameworkPath = Join-Path "$(Build.SourcesDirectory)" "framework"
                 Write-Host "Framework path: $frameworkPath"
                 
+                # Check if framework directory exists
                 if (Test-Path $frameworkPath) {
+                    Write-Host "Framework directory found" -ForegroundColor Green
                     Set-Location $frameworkPath
                     Write-Host "Changed to framework directory"
                     Write-Host "Current directory: $(Get-Location)"
                     
+                    # List contents to verify
+                    Write-Host "Directory contents:"
+                    Get-ChildItem | Format-Table Name, Length, LastWriteTime
+                    
                     if (Test-Path "requirements.txt") {
-                        Write-Host "Installing Python dependencies..."
+                        Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
                         python -m pip install --upgrade pip
                         pip install -r requirements.txt
                         
                         if ($LASTEXITCODE -eq 0) {
-                            Write-Host "Dependencies installed successfully"
+                            Write-Host "Dependencies installed successfully" -ForegroundColor Green
                         } else {
-                            Write-Host "Failed to install dependencies"
+                            Write-Host "Failed to install dependencies" -ForegroundColor Red
                             exit 1
                         }
                     } else {
-                        Write-Host "requirements.txt not found"
+                        Write-Host "requirements.txt not found in framework directory" -ForegroundColor Red
+                        Write-Host "Available files:"
+                        Get-ChildItem | Format-Table Name
                         exit 1
                     }
                 } else {
-                    Write-Host "Framework directory not found at: $frameworkPath"
-                    Write-Host "Available directories:"
-                    Get-ChildItem "$(Agent.BuildDirectory)/s" | Format-Table Name
+                    Write-Host "Framework directory not found at: $frameworkPath" -ForegroundColor Red
+                    Write-Host "Available directories in Build.SourcesDirectory:"
+                    Get-ChildItem "$(Build.SourcesDirectory)" | Where-Object {$_.PSIsContainer} | Format-Table Name
                     exit 1
                 }
           
@@ -104,7 +114,7 @@ stages:
             displayName: 'Run Smart Analysis'
             inputs:
               scriptSource: 'inline'
-              workingDirectory: '$(Agent.BuildDirectory)/s/framework'
+              workingDirectory: '$(Build.SourcesDirectory)/framework'
               script: |
                 import sys
                 import os
@@ -129,14 +139,14 @@ stages:
                     # Initialize orchestrator
                     orchestrator = SmartOrchestrator()
                     
-                    # Service repository path (relative to agent build directory)
-                    service_path = os.path.join('$(Agent.BuildDirectory)', 's', 'service')
+                    # Service repository path (using Build.SourcesDirectory)
+                    service_path = os.path.join('$(Build.SourcesDirectory)', 'service')
                     print(f"Service repository path: {service_path}")
                     print(f"Service repository exists: {os.path.exists(service_path)}")
                     
                     if not os.path.exists(service_path):
                         print("Service repository not found. Available directories:")
-                        base_path = os.path.join('$(Agent.BuildDirectory)', 's')
+                        base_path = '$(Build.SourcesDirectory)'
                         if os.path.exists(base_path):
                             for item in os.listdir(base_path):
                                 print(f"  {item}")
@@ -179,7 +189,7 @@ stages:
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Analysis Results'
             inputs:
-              targetPath: '$(Agent.BuildDirectory)/s/framework/analysis-results.json'
+              targetPath: '$(Build.SourcesDirectory)/framework/analysis-results.json'
               artifact: 'analysis-results'
 
   - stage: SmartBuild
@@ -212,7 +222,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $frameworkPath = "$(Agent.BuildDirectory)/s/framework"
+                $frameworkPath = Join-Path "$(Build.SourcesDirectory)" "framework"
                 Set-Location $frameworkPath
                 pip install -r requirements.txt
           
@@ -226,7 +236,7 @@ stages:
             displayName: 'Execute Smart Build Pipeline'
             inputs:
               scriptSource: 'inline'
-              workingDirectory: '$(Agent.BuildDirectory)/s/framework'
+              workingDirectory: '$(Build.SourcesDirectory)/framework'
               script: |
                 import sys
                 import json
@@ -252,7 +262,7 @@ stages:
                     orchestrator = SmartOrchestrator()
                     
                     # Service repository path
-                    service_path = os.path.join('$(Agent.BuildDirectory)', 's', 'service')
+                    service_path = os.path.join('$(Build.SourcesDirectory)', 'service')
                     
                     print(f"Framework working directory: {os.getcwd()}")
                     print(f"Service repository path: {service_path}")
@@ -313,7 +323,7 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
-                      $frameworkPath = "$(Agent.BuildDirectory)/s/framework"
+                      $frameworkPath = Join-Path "$(Build.SourcesDirectory)" "framework"
                       Set-Location $frameworkPath
                       pip install -r requirements.txt
                       Write-Host "Framework dependencies installed"
@@ -322,7 +332,7 @@ stages:
                   displayName: 'Generate Kubernetes Manifests'
                   inputs:
                     scriptSource: 'inline'
-                    workingDirectory: '$(Agent.BuildDirectory)/s/framework'
+                    workingDirectory: '$(Build.SourcesDirectory)/framework'
                     script: |
                       import sys
                       import json
@@ -406,7 +416,7 @@ stages:
                     command: 'apply'
                     useConfigurationFile: true
                     configurationType: 'filePath'
-                    configuration: '$(Agent.BuildDirectory)/s/framework/generated-k8s-manifest.yaml'
+                    configuration: '$(Build.SourcesDirectory)/framework/generated-k8s-manifest.yaml'
                     outputFormat: 'yaml'
                 
                 - task: Kubernetes@1
