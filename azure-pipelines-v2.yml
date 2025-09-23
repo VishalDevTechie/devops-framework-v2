@@ -114,7 +114,7 @@ stages:
             displayName: 'Run Smart Analysis'
             inputs:
               scriptSource: 'inline'
-              workingDirectory: '$(Build.SourcesDirectory)/framework'
+              workingDirectory: '$(Build.SourcesDirectory)/s/framework'
               script: |
                 import sys
                 import os
@@ -140,7 +140,7 @@ stages:
                     orchestrator = SmartOrchestrator()
                     
                     # Service repository path (using Build.SourcesDirectory)
-                    service_path = os.path.join('$(Build.SourcesDirectory)', 'service')
+                    service_path = os.path.join('$(Build.SourcesDirectory)','s', 'service')
                     print(f"Service repository path: {service_path}")
                     print(f"Service repository exists: {os.path.exists(service_path)}")
                     
