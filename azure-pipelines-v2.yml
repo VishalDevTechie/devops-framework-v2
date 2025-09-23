@@ -50,11 +50,11 @@ stages:
         steps:
           - checkout: framework
             displayName: 'Checkout DevOps Framework'
-            path: framework
+            path: s/framework
           
           - checkout: service
             displayName: 'Checkout Service Application'
-            path: service
+            path: s/service
           
           - task: UsePythonVersion@0
             displayName: 'Setup Python'
