@@ -261,7 +261,7 @@ stages:
                       Write-Host "Agent build directory: $(Agent.BuildDirectory)"
                       
                       # Navigate to framework directory
-                      $frameworkPath = Join-Path "$(Build.SourcesDirectory)" "framework"
+                      $frameworkPath = "$(Build.SourcesDirectory)"
                       Write-Host "Framework path: $frameworkPath"
                       
                       if (Test-Path $frameworkPath) {
@@ -295,7 +295,7 @@ stages:
                   displayName: 'Generate Kubernetes Manifests'
                   inputs:
                     targetType: 'inline'
-                    workingDirectory: '$(Build.SourcesDirectory)/framework'
+                    workingDirectory: '$(Build.SourcesDirectory)'
                     script: |
                       Write-Host "Generating Kubernetes Manifests..." -ForegroundColor Green
                       
@@ -343,7 +343,7 @@ stages:
                     command: 'apply'
                     useConfigurationFile: true
                     configurationType: 'filePath'
-                    configuration: '$(Build.SourcesDirectory)/framework/generated-k8s-manifest.yaml'
+                    configuration: '$(Build.SourcesDirectory)/generated-k8s-manifest.yaml'
                     outputFormat: 'yaml'
                 
                 - task: Kubernetes@1
