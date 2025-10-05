@@ -47,10 +47,10 @@ class FrameworkDetector:
     
     def detect_framework(self, repo_path: str) -> Tuple[str, float, Dict]:
         """Auto-detect application framework with confidence scoring"""
-        print(f"🔍 Detecting framework in: {repo_path}")
+        print(f" Detecting framework in: {repo_path}")
         
         if not os.path.exists(repo_path):
-            print(f"❌ Repository path does not exist: {repo_path}")
+            print(f"Repository path does not exist: {repo_path}")
             return 'unknown', 0.0, {}
         
         scores = {}
