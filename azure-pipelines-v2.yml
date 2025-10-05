@@ -116,133 +116,27 @@ stages:
               targetType: 'inline'
               workingDirectory: '$(Build.SourcesDirectory)/framework'
               script: |
-                Write-Host "Starting Smart Analysis" -ForegroundColor Cyan
-                Write-Host "Working directory: $(Get-Location)"
+                Write-Host "Running Smart Analysis..." -ForegroundColor Green
                 
-                # Verify directories
                 $servicePath = Join-Path "$(Build.SourcesDirectory)" "service"
-                Write-Host "Service path: $servicePath"
                 
                 if (-not (Test-Path $servicePath)) {
-                    Write-Host "ERROR: Service repository not found" -ForegroundColor Red
+                    Write-Host "ERROR: Service repository not found at: $servicePath" -ForegroundColor Red
                     exit 1
                 }
                 
-                # Create and execute Python script
-                $analysisScript = @"
-import sys
-import os
-import json
-from pathlib import Path
-
-print('='*60)
-print('Starting Smart Framework Analysis')
-print('='*60)
-
-# Setup paths
-current_dir = os.getcwd()
-scripts_dir = os.path.join(current_dir, 'scripts')
-service_path = r'$servicePath'
-
-print(f'\nCurrent directory: {current_dir}')
-print(f'Scripts directory: {scripts_dir}')
-print(f'Service repository: {service_path}')
-
-# Add scripts to Python path
-if os.path.exists(scripts_dir):
-    sys.path.insert(0, scripts_dir)
-    print(f'✅ Added scripts to Python path')
-else:
-    print(f'❌ Scripts directory not found')
-    sys.exit(1)
-
-# Verify service repository
-if not os.path.exists(service_path):
-    print(f'❌ Service repository not found at: {service_path}')
-    sys.exit(1)
-
-try:
-    # Import orchestrator
-    print('\n📦 Importing SmartOrchestrator...')
-    from smart_orchestrator import SmartOrchestrator
-    print('✅ SmartOrchestrator imported successfully')
-    
-    # Initialize and run analysis
-    print('\n🔍 Initializing orchestrator...')
-    orchestrator = SmartOrchestrator()
-    
-    print(f'\n🔎 Analyzing repository: {service_path}')
-    result = orchestrator.analyze_only(service_path)
-    
-    # Save results
-    output_file = 'analysis-results.json'
-    with open(output_file, 'w') as f:
-        json.dump(result, f, indent=2, default=str)
-    print(f'\n💾 Results saved to: {output_file}')
-    
-    # Display results
-    print('\n' + '='*60)
-    if result['success']:
-        print('✅ ANALYSIS COMPLETED SUCCESSFULLY')
-        print('='*60)
-        
-        config = result.get('config', {})
-        app = config.get('app', {})
-        detection = config.get('detection', {})
-        build_strategy = config.get('build_strategy', {})
-        docker = config.get('docker', {})
-        
-        print(f'\n📋 Application Details:')
-        print(f'  Name: {app.get("name", "unknown")}')
-        print(f'  Framework: {app.get("framework", "unknown")}')
-        print(f'  Confidence: {detection.get("confidence", 0):.1%}')
-        
-        print(f'\n🔨 Build Strategy:')
-        print(f'  Command: {build_strategy.get("command", "unknown")}')
-        print(f'  Type: {build_strategy.get("type", "unknown")}')
-        
-        print(f'\n🐳 Docker Configuration:')
-        print(f'  Image: {docker.get("full_image", "unknown")}')
-        print(f'  Port: {docker.get("port", "unknown")}')
-        
-        print('\n' + '='*60)
-        sys.exit(0)
-    else:
-        print('❌ ANALYSIS FAILED')
-        print('='*60)
-        print(f'\nError: {result.get("error", "Unknown error")}')
-        sys.exit(1)
-        
-except ImportError as e:
-    print(f'\n❌ Import Error: {e}')
-    print('\nAvailable files in scripts directory:')
-    if os.path.exists(scripts_dir):
-        for item in os.listdir(scripts_dir):
-            print(f'  - {item}')
-    sys.exit(1)
-    
-except Exception as e:
-    print(f'\n❌ Unexpected Error: {e}')
-    import traceback
-    print('\nFull traceback:')
-    traceback.print_exc()
-    sys.exit(1)
-"@
+                Write-Host "Service path: $servicePath" -ForegroundColor Cyan
+                Write-Host "Executing: python scripts/run_analysis.py" -ForegroundColor Yellow
                 
-                # Save script to file
-                $analysisScript | Out-File -FilePath "run_analysis.py" -Encoding UTF8 -NoNewline
+                python scripts/run_analysis.py "$servicePath"
                 
-                # Execute Python script
-                Write-Host "`nExecuting Python analysis..." -ForegroundColor Yellow
-                python run_analysis.py
-                
-                $exitCode = $LASTEXITCODE
-                if ($exitCode -ne 0) {
-                    Write-Host "`n❌ Analysis failed with exit code: $exitCode" -ForegroundColor Red
-                    exit $exitCode
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Analysis failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+                    exit $LASTEXITCODE
                 }
                 
-                Write-Host "`n✅ Analysis step completed" -ForegroundColor Green
+                Write-Host "Analysis completed successfully" -ForegroundColor Green
+          
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Analysis Results'
             inputs:
@@ -289,57 +183,39 @@ except Exception as e:
               command: 'login'
               containerRegistry: $(DOCKER_SERVICE_CONNECTION)
           
-          - task: PythonScript@0
+          - task: PowerShell@2
             displayName: 'Execute Smart Build Pipeline'
             inputs:
-              scriptSource: 'inline'
+              targetType: 'inline'
               workingDirectory: '$(Build.SourcesDirectory)/framework'
               script: |
-                import sys
-                import json
-                import os
+                Write-Host "Running Smart Build..." -ForegroundColor Green
                 
-                # Add scripts directory to Python path
-                scripts_path = os.path.join(os.getcwd(), 'scripts')
-                sys.path.insert(0, scripts_path)
+                $servicePath = Join-Path "$(Build.SourcesDirectory)" "service"
+                $analysisFile = Join-Path "$(Pipeline.Workspace)" "analysis-results.json"
                 
-                try:
-                    from smart_orchestrator import SmartOrchestrator
-                    
-                    # Load analysis results
-                    analysis_file = os.path.join('$(Pipeline.Workspace)', 'analysis-results.json')
-                    with open(analysis_file) as f:
-                        analysis_result = json.load(f)
-                    
-                    if not analysis_result['success']:
-                        print("Cannot proceed - analysis failed")
-                        sys.exit(1)
-                    
-                    # Initialize orchestrator
-                    orchestrator = SmartOrchestrator()
-                    
-                    # Service repository path
-                    service_path = os.path.join('$(Build.SourcesDirectory)', 'service')
-                    
-                    print(f"Framework working directory: {os.getcwd()}")
-                    print(f"Service repository path: {service_path}")
-                    print(f"Service repository exists: {os.path.exists(service_path)}")
-                    
-                    # Execute build and docker stages
-                    config = analysis_result['config']
-                    result = orchestrator.process_repository(service_path, config)
-                    
-                    if result['success']:
-                        print("Build and containerization completed")
-                    else:
-                        print(f"Build failed: {result.get('error')}")
-                        sys.exit(1)
-                        
-                except Exception as e:
-                    print(f"Build pipeline error: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    sys.exit(1)
+                Write-Host "Service path: $servicePath" -ForegroundColor Cyan
+                Write-Host "Analysis file: $analysisFile" -ForegroundColor Cyan
+                
+                if (-not (Test-Path $servicePath)) {
+                    Write-Host "ERROR: Service repository not found" -ForegroundColor Red
+                    exit 1
+                }
+                
+                if (-not (Test-Path $analysisFile)) {
+                    Write-Host "ERROR: Analysis results not found" -ForegroundColor Red
+                    exit 1
+                }
+                
+                Write-Host "Executing: python scripts/run_build.py" -ForegroundColor Yellow
+                python scripts/run_build.py "$servicePath" "$analysisFile"
+                
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Build failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+                    exit $LASTEXITCODE
+                }
+                
+                Write-Host "Build completed successfully" -ForegroundColor Green
           
           - task: Docker@2
             displayName: 'Docker Logout'
@@ -385,68 +261,32 @@ except Exception as e:
                       pip install -r requirements.txt
                       Write-Host "Framework dependencies installed"
                 
-                - task: PythonScript@0
+                - task: PowerShell@2
                   displayName: 'Generate Kubernetes Manifests'
                   inputs:
-                    scriptSource: 'inline'
+                    targetType: 'inline'
                     workingDirectory: '$(Build.SourcesDirectory)/framework'
                     script: |
-                      import sys
-                      import json
-                      import os
+                      Write-Host "Generating Kubernetes Manifests..." -ForegroundColor Green
                       
-                      # Add scripts directory to Python path
-                      scripts_path = os.path.join(os.getcwd(), 'scripts')
-                      sys.path.insert(0, scripts_path)
+                      $analysisFile = Join-Path "$(Pipeline.Workspace)" "analysis-results.json"
                       
-                      try:
-                          from smart_deploy import run as deploy_run
-                          
-                          # Load configuration
-                          analysis_file = os.path.join('$(Pipeline.Workspace)', 'analysis-results.json')
-                          with open(analysis_file) as f:
-                              analysis_result = json.load(f)
-                          
-                          if not analysis_result['success']:
-                              print("Cannot deploy - analysis failed")
-                              sys.exit(1)
-                          
-                          config = analysis_result['config']
-                          
-                          # Ensure deployment configuration exists
-                          if 'deployment' not in config:
-                              config['deployment'] = {
-                                  'namespace': 'default',
-                                  'environment': 'production',
-                                  'replicas': 1
-                              }
-                          
-                          print(f"Generating manifests for: {config['app']['name']}")
-                          print(f"Docker Image: {config['docker']['full_image']}")
-                          
-                          # Generate manifests
-                          deploy_result = deploy_run(config)
-                          
-                          if deploy_result['success']:
-                              print("Kubernetes manifests generated successfully")
-                              print(f"Manifest file: {deploy_result['manifest_path']}")
-                              
-                              # Display manifest preview
-                              with open(deploy_result['manifest_path'], 'r') as f:
-                                  manifest_content = f.read()
-                                  print("\nGenerated Manifest Preview:")
-                                  print("-" * 50)
-                                  print(manifest_content[:1000] + "..." if len(manifest_content) > 1000 else manifest_content)
-                                  print("-" * 50)
-                          else:
-                              print(f"Manifest generation failed: {deploy_result.get('error')}")
-                              sys.exit(1)
-                              
-                      except Exception as e:
-                          print(f"Deploy script error: {e}")
-                          import traceback
-                          traceback.print_exc()
-                          sys.exit(1)
+                      Write-Host "Analysis file: $analysisFile" -ForegroundColor Cyan
+                      
+                      if (-not (Test-Path $analysisFile)) {
+                          Write-Host "ERROR: Analysis results not found" -ForegroundColor Red
+                          exit 1
+                      }
+                      
+                      Write-Host "Executing: python scripts/run_deploy.py" -ForegroundColor Yellow
+                      python scripts/run_deploy.py "$analysisFile"
+                      
+                      if ($LASTEXITCODE -ne 0) {
+                          Write-Host "Deployment preparation failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+                          exit $LASTEXITCODE
+                      }
+                      
+                      Write-Host "Manifest generation completed successfully" -ForegroundColor Green
                 
                 - task: Kubernetes@1
                   displayName: 'Connect to AKS and Create Namespace'
