@@ -190,11 +190,15 @@ class SmartConfigMerger:
                 limits = resources['limits']
                 requests = resources['requests']
                 
-                if 'cpu' in both and self._parse_cpu(requests['cpu']) > self._parse_cpu(limits['cpu']):
-                    warnings.append("CPU request exceeds limit")
+                # Check CPU
+                if 'cpu' in limits and 'cpu' in requests:
+                    if self._parse_cpu(requests['cpu']) > self._parse_cpu(limits['cpu']):
+                        warnings.append("CPU request exceeds limit")
                 
-                if 'memory' in both and self._parse_memory(requests['memory']) > self._parse_memory(limits['memory']):
-                    warnings.append("Memory request exceeds limit")
+                # Check memory
+                if 'memory' in limits and 'memory' in requests:
+                    if self._parse_memory(requests['memory']) > self._parse_memory(limits['memory']):
+                        warnings.append("Memory request exceeds limit")
         
         config['validation'] = {
             'errors': errors,
