@@ -143,10 +143,10 @@ class FrameworkDetector:
             max_possible = 50  # Rough estimate of maximum possible score
             confidence = min(max_score / max_possible, 1.0)
             
-            print(f"✅ Detected: {detected_framework} (confidence: {confidence:.1%})")
+            print(f" Detected: {detected_framework} (confidence: {confidence:.1%})")
             return detected_framework, confidence, detection_details[detected_framework]
         
-        print("❓ No framework detected with confidence")
+        print("No framework detected with confidence")
         return 'generic', 0.1, {}
     
     def detect_build_strategy(self, repo_path: str, framework: str) -> Dict:
@@ -207,7 +207,7 @@ class FrameworkDetector:
             with open(package_json_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            print(f"⚠️ Failed to parse package.json: {e}")
+            print(f"Failed to parse package.json: {e}")
             return None
     
     def detect_output_directory(self, repo_path: str, framework: str, app_name: str) -> str:
