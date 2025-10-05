@@ -334,7 +334,7 @@ stages:
                         labels:
                           managed-by: devops-framework-v2
                   continueOnError: true
-                
+
                 - task: Kubernetes@1
                   displayName: 'Deploy Application to AKS'
                   inputs:
@@ -346,13 +346,30 @@ stages:
                     configuration: '$(Build.SourcesDirectory)/generated-k8s-manifest.yaml'
                     outputFormat: 'yaml'
                 
+
+
+                # FIX 4: Extract app name from analysis results
+                - task: PowerShell@2
+                  displayName: 'Extract Deployment Name'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      # Load analysis results to get the actual app name
+                      $analysisFile = Join-Path "$(Pipeline.Workspace)" "analysis-results.json"
+                      $config = Get-Content $analysisFile | ConvertFrom-Json
+                      $appName = $config.config.app.name
+                      
+                      Write-Host "Application Name: $appName" -ForegroundColor Green
+                      Write-Host "##vso[task.setvariable variable=APP_NAME]$appName"
+
+                
                 - task: Kubernetes@1
                   displayName: 'Wait for Rollout to Complete'
                   inputs:
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: $(AKS_SERVICE_CONNECTION)
                     command: 'rollout'
-                    arguments: 'status deployment/$(Build.Repository.Name) --timeout=300s --namespace=default'
+                    arguments: 'status deployment/$(APP_NAME) --timeout=300s --namespace=default'
                   timeoutInMinutes: 10
                 
                 - task: Kubernetes@1
@@ -361,7 +378,7 @@ stages:
                     connectionType: 'Kubernetes Service Connection'
                     kubernetesServiceEndpoint: $(AKS_SERVICE_CONNECTION)
                     command: 'get'
-                    arguments: 'all -l managed-by=devops-framework-v2 --namespace=default -o wide'
+                    arguments: 'all -l app=$(APP_NAME) --namespace=default -o wide'
                 
                 - task: Kubernetes@1
                   displayName: 'Get Service External IP'
@@ -378,7 +395,7 @@ stages:
                     script: |
                       Write-Host "Deployment completed!" -ForegroundColor Green
                       Write-Host "Deployment Summary:" -ForegroundColor Cyan
-                      Write-Host "  Application: $(Build.Repository.Name)" -ForegroundColor White
+                      Write-Host "  Application: $(APP_NAME)" -ForegroundColor White
                       Write-Host "  Namespace: default" -ForegroundColor White
                       Write-Host "  Environment: production" -ForegroundColor White
                       Write-Host "  Build: $(Build.BuildNumber)" -ForegroundColor White
@@ -386,4 +403,4 @@ stages:
                       Write-Host "Next Steps:" -ForegroundColor Yellow
                       Write-Host "  1. Check the External IP from the service output above"
                       Write-Host "  2. Access your application at http://<EXTERNAL-IP>"
-                      Write-Host "  3. Monitor deployment: kubectl get pods --namespace=default"
+                      Write-Host "  3. Monitor deployment: kubectl get pods --namespace=default -l app=$(APP_NAME)"
