@@ -238,7 +238,7 @@ stages:
               steps:
                 - checkout: framework
                   displayName: 'Checkout DevOps Framework'
-                  path: framework
+                  path: s/framework
                 
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download Analysis Results'
