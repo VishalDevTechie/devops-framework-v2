@@ -153,11 +153,11 @@ stages:
         steps:
           - checkout: framework
             displayName: 'Checkout DevOps Framework'
-            path: framework
+            path: s/framework
           
           - checkout: service
             displayName: 'Checkout Service Application'
-            path: service
+            path: s/service
           
           - task: DownloadPipelineArtifact@2
             inputs:
