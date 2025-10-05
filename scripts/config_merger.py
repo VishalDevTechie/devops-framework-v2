@@ -157,7 +157,8 @@ class SmartConfigMerger:
         
         deployment_config = config['deployment']
         if 'namespace' not in deployment_config:
-            deployment_config['namespace'] = config['app']['name']
+#            deployment_config['namespace'] = config['app']['name']
+            deployment_config['namespace'] = self.global_config.get('kubernetes', {}).get('default_namespace', 'default')
         
         if 'environment' not in deployment_config:
             branch = source_config.get('branch', 'unknown')
