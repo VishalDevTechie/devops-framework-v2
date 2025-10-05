@@ -153,11 +153,11 @@ stages:
         steps:
           - checkout: framework
             displayName: 'Checkout DevOps Framework'
-            path: framework
+            path: s/framework
           
           - checkout: service
             displayName: 'Checkout Service Application'
-            path: service
+            path: s/service
           
           - task: DownloadPipelineArtifact@2
             inputs:
@@ -238,7 +238,7 @@ stages:
               steps:
                 - checkout: framework
                   displayName: 'Checkout DevOps Framework'
-                  path: framework
+                  path: s/framework
                 
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download Analysis Results'
@@ -256,11 +256,41 @@ stages:
                   inputs:
                     targetType: 'inline'
                     script: |
+                      Write-Host "Installing Framework Dependencies" -ForegroundColor Green
+                      Write-Host "Build source directory: $(Build.SourcesDirectory)"
+                      Write-Host "Agent build directory: $(Agent.BuildDirectory)"
+                      
+                      # Navigate to framework directory
                       $frameworkPath = Join-Path "$(Build.SourcesDirectory)" "framework"
-                      Set-Location $frameworkPath
-                      pip install -r requirements.txt
-                      Write-Host "Framework dependencies installed"
-                
+                      Write-Host "Framework path: $frameworkPath"
+                      
+                      if (Test-Path $frameworkPath) {
+                          Set-Location $frameworkPath
+                          Write-Host "Changed to framework directory"
+                          Write-Host "Current directory: $(Get-Location)"
+                          
+                          if (Test-Path "requirements.txt") {
+                              Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
+                              python -m pip install --upgrade pip
+                              pip install -r requirements.txt
+                              
+                              if ($LASTEXITCODE -eq 0) {
+                                  Write-Host "Dependencies installed successfully" -ForegroundColor Green
+                              } else {
+                                  Write-Host "Failed to install dependencies" -ForegroundColor Red
+                                  exit 1
+                              }
+                          } else {
+                              Write-Host "requirements.txt not found in framework directory" -ForegroundColor Red
+                              Get-ChildItem | Format-Table Name
+                              exit 1
+                          }
+                      } else {
+                          Write-Host "Framework directory not found at: $frameworkPath" -ForegroundColor Red
+                          Write-Host "Available directories:"
+                          Get-ChildItem "$(Build.SourcesDirectory)" | Where-Object {$_.PSIsContainer} | Format-Table Name
+                          exit 1
+                      }
                 - task: PowerShell@2
                   displayName: 'Generate Kubernetes Manifests'
                   inputs:
