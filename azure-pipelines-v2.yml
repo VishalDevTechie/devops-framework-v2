@@ -261,7 +261,7 @@ stages:
                       Write-Host "Agent build directory: $(Agent.BuildDirectory)"
                       
                       # Navigate to framework directory
-                      $frameworkPath = Join-Path "$(Build.SourcesDirectory)" "framework"
+                      $frameworkPath = "$(Build.SourcesDirectory)"
                       Write-Host "Framework path: $frameworkPath"
                       
                       if (Test-Path $frameworkPath) {
